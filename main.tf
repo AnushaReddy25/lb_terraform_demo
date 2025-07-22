@@ -2,13 +2,17 @@ variable "instance_count" {
   default = 2
 }
 
-# Use default VPC and subnets
+# Use default VPC
 data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
+# Get all subnets in the default VPC (updated to aws_subnets with filter)
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
 # Amazon Linux 2 AMI
@@ -49,8 +53,8 @@ resource "aws_instance" "web" {
   count         = var.instance_count
   ami           = data.aws_ami.amazon_linux_2.id
   instance_type = "t3.micro"
-  subnet_id     = element(data.aws_subnet_ids.default.ids, count.index)
-  security_groups = [aws_security_group.web_sg.id]
+  subnet_id     = element(data.aws_subnets.default.ids, count.index)
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
 
   user_data = <<-EOF
               #!/bin/bash
@@ -70,7 +74,7 @@ resource "aws_instance" "web" {
 resource "aws_lb" "app_lb" {
   name               = "app-alb"
   load_balancer_type = "application"
-  subnets            = data.aws_subnet_ids.default.ids
+  subnets            = data.aws_subnets.default.ids
   security_groups    = [aws_security_group.web_sg.id]
 }
 
@@ -110,3 +114,4 @@ resource "aws_lb_target_group_attachment" "web_instances" {
   target_id        = aws_instance.web[count.index].id
   port             = 80
 }
+
